@@ -1,0 +1,12 @@
+{
+  "name": "shop-app",
+  "version": "3.0.0",
+  "description": "Simple shop with CRUD on Products, Customers and Orders (Node.js + Express + MongoDB)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mongodb": "^6.8.0"
+  }
+}

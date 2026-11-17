@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shop</title>
+<style>
+:root{--green:#00684a}
+body{font-family:Arial,sans-serif;background:#f1f6f3;margin:0;padding:0 15px 40px}
+header{background:linear-gradient(135deg,#00684a,#13aa52);color:#fff;text-align:center;padding:40px 20px;margin:0 -15px 25px}
+header h1{margin:0 0 8px;font-size:38px}
+header p{margin:0;opacity:.9}
+main{max-width:1000px;margin:0 auto}
+nav button{padding:10px 20px;margin-right:6px;border:1px solid var(--green);background:#fff;color:var(--green);border-radius:20px;cursor:pointer;font-weight:bold}
+nav button.active{background:var(--green);color:#fff}
+form{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0;background:#fff;padding:15px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+input{padding:8px;border:1px solid #bbb;border-radius:4px}
+button{padding:8px 14px;cursor:pointer;border:none;border-radius:4px;background:#ccc}
+form button[type=submit]{background:var(--green);color:#fff}
+td button:first-of-type{background:#1a73e8;color:#fff}
+td button:last-of-type{background:#d93025;color:#fff}
+table{width:100%;border-collapse:collapse;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+th{background:var(--green);color:#fff}
+th,td{padding:10px;text-align:left;border-bottom:1px solid #e0e0e0}
+tbody tr:nth-child(even){background:#f6faf7}
+</style>
+</head>
+<body>
+<header><h1>Shop</h1><p>Products, Customers and Orders managed with MongoDB</p></header>
+<main>
+<nav id="tabs"></nav>
+<form id="form"></form>
+<table><thead id="head"></thead><tbody id="list"></tbody></table>
+</main>
+<script>
+// [field name, label, input type]
+const config = {
+  products: [["name","Name"],["price","Price","number"],["stock","Stock","number"],["category","Category"]],
+  customers: [["name","Name"],["email","Email"],["city","City"]],
+  orders: [["customer_email","Customer email"],["date","Date (2026-11-17)"],
+           ["items","Items (product:qty:price, ...)"],["total","Total","number"],["status","Status"]],
+};
+let kind = "products";
+let editingId = null;
+const $ = (id) => document.getElementById(id);
+
+const itemsToText = (items) =>
+  (items || []).map((i) => [i.product, i.quantity, i.price].join(":")).join(", ");
+const textToItems = (t) =>
+  t.split(",").map((s) => s.trim()).filter(Boolean).map((s) => {
+    const [product, quantity, price] = s.split(":");
+    return { product: product.trim(), quantity: Number(quantity), price: Number(price) };
+  });
+
+function setup() {
+  editingId = null;
+  $("tabs").innerHTML = "";
+  for (const k of Object.keys(config)) {
+    const b = document.createElement("button");
+    b.textContent = k[0].toUpperCase() + k.slice(1);
+    b.className = k === kind ? "active" : "";
+    b.onclick = () => { kind = k; setup(); };
+    $("tabs").appendChild(b);
+  }
+  const form = $("form");
+  form.innerHTML = "";
+  for (const [f, label, type] of config[kind]) {
+    const i = document.createElement("input");
+    i.id = "f_" + f;
+    i.placeholder = label;
+    i.type = type || "text";
+    if (type === "number") i.step = "any";
+    i.required = true;
+    form.appendChild(i);
+  }
+  const save = document.createElement("button");
+  save.type = "submit";
+  save.id = "save";
+  save.textContent = "Add";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.id = "cancel";
+  cancel.textContent = "Cancel";
+  cancel.hidden = true;
+  cancel.onclick = setup;
+  form.append(save, cancel);
+
+  const tr = document.createElement("tr");
+  for (const [, label] of config[kind].concat([[0, "Actions"]])) {
+    const th = document.createElement("th");
+    th.textContent = label.split(" (")[0];
+    tr.appendChild(th);
+  }
+  $("head").innerHTML = "";
+  $("head").appendChild(tr);
+  load();
+}
+
+async function load() {
+  const items = await (await fetch("/api/" + kind)).json();
+  const list = $("list");
+  list.innerHTML = "";
+  for (const p of items) {
+    const tr = document.createElement("tr");
+    for (const [f] of config[kind]) {
+      const td = document.createElement("td");
+      td.textContent = f === "items" ? itemsToText(p[f]) : p[f];
+      tr.appendChild(td);
+    }
+    const td = document.createElement("td");
+    const edit = document.createElement("button");
+    edit.textContent = "Edit";
+    edit.onclick = () => startEdit(p);
+    const del = document.createElement("button");
+    del.textContent = "Delete";
+    del.onclick = () => remove(p._id);
+    td.append(edit, " ", del);
+    tr.appendChild(td);
+    list.appendChild(tr);
+  }
+}
+
+function startEdit(p) {
+  editingId = p._id;
+  for (const [f] of config[kind]) {
+    $("f_" + f).value = f === "items" ? itemsToText(p[f]) : p[f];
+  }
+  $("save").textContent = "Update";
+  $("cancel").hidden = false;
+}
+
+$("form").onsubmit = async (e) => {
+  e.preventDefault();
+  const body = {};
+  for (const [f] of config[kind]) {
+    const v = $("f_" + f).value;
+    body[f] = f === "items" ? textToItems(v) : v;
+  }
+  const res = await fetch("/api/" + kind + (editingId ? "/" + editingId : ""), {
+    method: editingId ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) alert("Error: check the values you typed");
+  setup();
+};
+
+async function remove(id) {
+  if (!confirm("Delete this item?")) return;
+  await fetch("/api/" + kind + "/" + id, { method: "DELETE" });
+  load();
+}
+
+setup();
+</script>
+</body>
+</html>
